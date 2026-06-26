@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0F">
+<title>スパーリング現在地診断｜KN-LINK BOXING</title>
+<style>
+  /* ============================================================
+     ▼ 差し替え用変数（noteのURLはここを書き換えるだけ）
+     JS側の NOTE_ROADMAP_URL も合わせて参照してください
+     ============================================================ */
+  :root{
+    --canvas:#0D0D0F;
+    --surface:#17171B;
+    --surface-2:#1F1F25;
+    --ink:#F4F2ED;
+    --muted:#86868C;
+    --muted-2:#5B5B61;
+    --red:#E0182B;
+    --red-deep:#B00F20;
+    --hair:rgba(244,242,237,.10);
+    --hair-strong:rgba(244,242,237,.20);
+    --shadow:0 24px 60px -24px rgba(0,0,0,.8);
+    --maxw:480px;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--canvas);
+    color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",
+      -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    line-height:1.6;
+    overflow-x:hidden;
+  }
+  /* 微かな赤い斜光（コーナーの照明） */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(120% 60% at 85% -10%, rgba(224,24,43,.10), transparent 60%),
+      radial-gradient(90% 50% at -10% 110%, rgba(224,24,43,.05), transparent 55%);
+  }
+
+  .stage{
+    position:relative;z-index:1;
+    width:100%;max-width:var(--maxw);
+    margin-inline:auto;
+    min-height:100svh;min-height:100vh;
+    padding:max(22px,env(safe-area-inset-top)) 24px max(28px,env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;
+  }
+
+  .eyebrow{
+    font-size:11px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;
+    display:flex;align-items:center;gap:10px;
+  }
+  .eyebrow .tick{width:18px;height:2px;background:var(--red);display:inline-block}
+
+  /* ---- 画面共通の出入り ---- */
+  .screen{display:none;flex:1;flex-direction:column}
+  .screen.is-active{display:flex;animation:enter .5s var(--ease) both}
+  @keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+  /* ============ イントロ ============ */
+  #intro{justify-content:space-between}
+  .intro-top{padding-top:6px}
+  .intro-hero{margin-top:auto;padding-bottom:8px}
+  .kicker{
+    font-size:12px;letter-spacing:.2em;color:var(--red);
+    font-weight:800;text-transform:uppercase;margin-bottom:18px;
+  }
+  h1.title{
+    font-size:clamp(38px,12vw,52px);
+    line-height:1.02;font-weight:900;letter-spacing:.01em;
+  }
+  h1.title .thin{display:block;font-size:.46em;font-weight:700;letter-spacing:.18em;
+    color:var(--muted);margin-top:14px;text-transform:uppercase}
+  .lede{margin-top:22px;color:var(--ink);font-size:15px;max-width:30ch}
+  .lede b{color:var(--red);font-weight:800}
+  .intro-meta{
+    display:flex;gap:0;margin:26px 0 22px;border-top:1px solid var(--hair);
+    border-bottom:1px solid var(--hair);
+  }
+  .intro-meta .cell{flex:1;padding:14px 0;text-align:center;position:relative}
+  .intro-meta .cell+.cell::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:1px;background:var(--hair)}
+  .intro-meta .num{font-size:24px;font-weight:900;letter-spacing:.02em}
+  .intro-meta .lab{font-size:10px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase;margin-top:4px}
+
+  /* ============ ボタン ============ */
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    width:100%;border:none;cursor:pointer;
+    font-family:inherit;font-size:16px;font-weight:800;letter-spacing:.04em;
+    padding:18px 20px;border-radius:2px;color:var(--ink);
+    transition:transform .15s var(--ease),background .2s ease,border-color .2s ease;
+  }
+  .btn:active{transform:scale(.985)}
+  .btn-primary{
+    background:var(--red);color:#fff;
+    box-shadow:0 14px 30px -14px rgba(224,24,43,.7);
+    position:relative;overflow:hidden;
+  }
+  .btn-primary::after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:40%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.22),transparent);
+    transform:skewX(-18deg);animation:sheen 4.5s var(--ease) 1.2s infinite}
+  @keyframes sheen{0%{left:-50%}22%,100%{left:130%}}
+  .btn-primary:hover{background:var(--red-deep)}
+  .btn-arrow{font-size:18px;line-height:1}
+
+  /* ============ 質問 ============ */
+  .qhead{padding-top:4px}
+  .progress-wrap{margin:14px 0 4px}
+  .progress-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .qcount{font-size:12px;letter-spacing:.2em;color:var(--muted);font-weight:800}
+  .qcount b{color:var(--ink);font-size:15px}
+  .qphase-hint{font-size:11px;letter-spacing:.18em;color:var(--muted-2);text-transform:uppercase}
+  .bar{height:3px;background:var(--hair);border-radius:2px;overflow:hidden}
+  .bar-fill{height:100%;width:0;background:var(--red);transition:width .55s var(--ease)}
+
+  .qbody{flex:1;display:flex;flex-direction:column;justify-content:center;padding:8px 0}
+  .qno{font-size:13px;font-weight:800;letter-spacing:.2em;color:var(--red);margin-bottom:18px}
+  .qtext{font-size:clamp(22px,6.4vw,28px);font-weight:800;line-height:1.5;letter-spacing:.01em}
+
+  .answers{display:flex;flex-direction:column;gap:12px;padding-bottom:6px}
+  .ans{
+    display:flex;align-items:center;justify-content:space-between;
+    width:100%;cursor:pointer;font-family:inherit;
+    background:var(--surface);border:1px solid var(--hair);
+    color:var(--ink);padding:20px 22px;border-radius:2px;
+    font-size:18px;font-weight:800;letter-spacing:.04em;text-align:left;
+    transition:transform .15s var(--ease),border-color .2s ease,background .2s ease;
+  }
+  .ans .mark{font-size:12px;letter-spacing:.18em;color:var(--muted-2);font-weight:700;text-transform:uppercase}
+  .ans:hover{border-color:var(--hair-strong);background:var(--surface-2)}
+  .ans:active{transform:scale(.99)}
+  .ans.yes:hover{border-color:var(--red)}
+  .ans.yes:hover .mark{color:var(--red)}
+
+  /* ============ 結果 ============ */
+  #result{overflow-y:auto}
+  .res-eyebrow{margin-bottom:22px}
+  .verdict{display:flex;align-items:flex-end;gap:16px;margin-bottom:6px}
+  .verdict .pnum{font-size:clamp(72px,26vw,108px);font-weight:900;line-height:.8;letter-spacing:-.02em}
+  .verdict .pof{font-size:15px;color:var(--muted);font-weight:700;letter-spacing:.1em;padding-bottom:12px}
+  .pname{font-size:22px;font-weight:900;letter-spacing:.02em;margin-top:4px}
+  .pname .en{display:block;font-size:11px;letter-spacing:.3em;color:var(--red);
+    text-transform:uppercase;font-weight:800;margin-top:8px}
+
+  /* ラダー（シグネチャー：コーナーから頂点へ） */
+  .ladder{display:flex;flex-direction:column-reverse;gap:7px;margin:26px 0 30px}
+  .rung{
+    display:flex;align-items:center;gap:14px;
+    padding:13px 16px;border:1px solid var(--hair);border-radius:2px;
+    background:var(--surface);
+    opacity:.35;transform:translateX(-8px);
+    transition:opacity .45s var(--ease),transform .45s var(--ease),
+      background .45s ease,border-color .45s ease;
+  }
+  .rung.lit{opacity:1;transform:none}
+  .rung .rn{font-size:13px;font-weight:900;letter-spacing:.05em;width:22px;color:var(--muted);}
+  .rung .rname{font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--muted)}
+  .rung .ren{margin-left:auto;font-size:10px;letter-spacing:.22em;color:var(--muted-2);text-transform:uppercase}
+  .rung.current{
+    background:linear-gradient(100deg,rgba(224,24,43,.16),rgba(224,24,43,.04));
+    border-color:var(--red);opacity:1;
+  }
+  .rung.current .rn{color:#fff;background:var(--red);width:auto;min-width:26px;height:26px;
+    display:flex;align-items:center;justify-content:center;border-radius:2px;}
+  .rung.current .rname{color:var(--ink)}
+  .rung.current .ren{color:var(--red)}
+
+  .blocks{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--hair)}
+  .block{padding:20px 0;border-bottom:1px solid var(--hair)}
+  .block .lab{
+    font-size:11px;letter-spacing:.22em;text-transform:uppercase;font-weight:800;
+    color:var(--red);display:flex;align-items:center;gap:9px;margin-bottom:10px;
+  }
+  .block .lab .tick{width:16px;height:2px;background:var(--red)}
+  .block p{font-size:15px;color:var(--ink);line-height:1.78}
+
+  .cta-zone{margin-top:30px}
+  .cta-kicker{font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;letter-spacing:.04em}
+  .cta-kicker b{color:var(--ink);font-weight:800}
+  .restart{
+    display:block;width:100%;text-align:center;margin-top:16px;
+    background:none;border:none;cursor:pointer;font-family:inherit;
+    color:var(--muted);font-size:13px;letter-spacing:.08em;font-weight:700;
+    padding:10px;text-decoration:underline;text-underline-offset:4px;
+  }
+  .restart:hover{color:var(--ink)}
+
+  .foot{text-align:center;font-size:10px;letter-spacing:.24em;color:var(--muted-2);
+    text-transform:uppercase;padding-top:26px}
+
+  a{color:inherit;text-decoration:none}
+  :focus-visible{outline:2px solid var(--red);outline-offset:3px}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+    .rung{opacity:1;transform:none}
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+
+  <!-- ============ イントロ ============ -->
+  <section id="intro" class="screen is-active">
+    <div class="intro-top">
+      <div class="eyebrow"><span class="tick"></span>KN-LINK BOXING</div>
+    </div>
+
+    <div class="intro-hero">
+      <div class="kicker">30秒・5問で判定</div>
+      <h1 class="title">スパーリング<br>現在地診断<span class="thin">Sparring Diagnosis</span></h1>
+      <p class="lede">あなたのスパーリングは、いま<b>どの段階</b>にいるのか。<br>「はい / いいえ」だけで、現在地と次の一手が分かります。</p>
+
+      <div class="intro-meta">
+        <div class="cell"><div class="num">5</div><div class="lab">Questions</div></div>
+        <div class="cell"><div class="num">30<span style="font-size:.55em">s</span></div><div class="lab">Minutes</div></div>
+        <div class="cell"><div class="num">5</div><div class="lab">Phases</div></div>
+      </div>
+
+      <button class="btn btn-primary" id="startBtn">診断をはじめる<span class="btn-arrow">→</span></button>
+    </div>
+  </section>
+
+  <!-- ============ 質問 ============ -->
+  <section id="quiz" class="screen">
+    <div class="qhead">
+      <div class="eyebrow"><span class="tick"></span>Diagnosis</div>
+      <div class="progress-wrap">
+        <div class="progress-row">
+          <div class="qcount">Q <b id="qNow">1</b> / 5</div>
+          <div class="qphase-hint" id="phaseHint">Foundation → Control</div>
+        </div>
+        <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+      </div>
+    </div>
+
+    <div class="qbody">
+      <div class="qno" id="qNo">Question 01</div>
+      <div class="qtext" id="qText">—</div>
+    </div>
+
+    <div class="answers">
+      <button class="ans yes" data-v="1">はい<span class="mark">Yes</span></button>
+      <button class="ans no" data-v="0">いいえ<span class="mark">No</span></button>
+    </div>
+  </section>
+
+  <!-- ============ 結果 ============ -->
+  <section id="result" class="screen">
+    <div class="eyebrow res-eyebrow"><span class="tick"></span>Your Position</div>
+
+    <div class="verdict">
+      <div class="pnum" id="rNum">3</div>
+      <div class="pof">/ 5 PHASE</div>
+    </div>
+    <div class="pname" id="rName">攻防切替フェーズ<span class="en" id="rEn">TRANSITION</span></div>
+
+    <div class="ladder" id="ladder"><!-- JSで生成 --></div>
+
+    <div class="blocks">
+      <div class="block">
+        <div class="lab"><span class="tick"></span>現在地</div>
+        <p id="rNow"></p>
+      </div>
+      <div class="block">
+        <div class="lab"><span class="tick"></span>いまの課題</div>
+        <p id="rIssue"></p>
+      </div>
+      <div class="block">
+        <div class="lab"><span class="tick"></span>次にやるべきこと</div>
+        <p id="rNext"></p>
+      </div>
+    </div>
+
+    <div class="cta-zone">
+      <div class="cta-kicker">現在地が分かったら、次は<b>頂点までの全体像</b>。</div>
+      <a class="btn btn-primary" id="ctaBtn" href="#" target="_blank" rel="noopener">
+        完全版ロードマップを見る<span class="btn-arrow">→</span>
+      </a>
+      <button class="restart" id="restartBtn">もう一度診断する</button>
+    </div>
+
+    <div class="foot">KN-LINK BOXING CLUB</div>
+  </section>
+
+</main>
+
+<script>
+/* ============================================================
+   ▼ noteリンク（ここを書き換えるだけで差し替え可能）
+   ============================================================ */
+const NOTE_ROADMAP_URL = "https://note.com/coachkeita717/n/n0691a8da2017?sub_rt=share_pw";
+
+/* ---- 質問（段階を順番に上がるラダー構造）---- */
+const QUESTIONS = [
+  "スパーリング中、相手のパンチが「見えて」いて、慌てずに対応できている。",
+  "自分から距離を詰めて、狙ったパンチを当てにいけている。",
+  "攻撃と防御を、自分の意思で切り替えられている。",
+  "相手の癖やパターンを読んで、対応を変えられている。",
+  "スパーリングの主導権を握り、自分の展開に持ち込めている。"
+];
+
+/* ---- Phase定義 ---- */
+const PHASES = {
+  1:{ name:"防御本能フェーズ", en:"SURVIVAL",
+      now:"スパーリングがまだ「耐える時間」になっている段階。相手のパンチに反応で動いていて、自分から仕掛ける余裕がない。",
+      issue:"恐怖で視野が狭くなり、ガードを固めるだけで手が止まる。もらわないことだけに意識が向いている。",
+      next:"「もらわないこと」より先に「最後まで見ること」。相手のパンチを目で追い切る練習から始める。慣れる前に、まず見る。" },
+  2:{ name:"手が出るフェーズ", en:"OFFENSE",
+      now:"自分からパンチを出せるようになってきた段階。攻める意思は持てている。",
+      issue:"攻撃と防御がつながっておらず、打った後に無防備になる。出して終わり、で次の動作が設計できていない。",
+      next:"「1発出したら必ず動く」をルール化する。打ち終わりに頭の位置を残さない。攻撃の最後を防御で締める。" },
+  3:{ name:"攻防切替フェーズ", en:"TRANSITION",
+      now:"攻撃と防御を自分の意思で切り替えられる段階。やるべきことの「型」は見え始めている。",
+      issue:"切り替えがまだ後手。相手に合わせて動いていて、主導権までは握れていない。良い場面が単発で終わる。",
+      next:"1ラウンドだけ「先に動く」を徹底する。距離とタイミングを相手任せにせず、自分から先に決める。" },
+  4:{ name:"読み・組み立てフェーズ", en:"READING",
+      now:"相手の癖を読み、対応を変えられる段階。スパーリングが「考える時間」になっている。",
+      issue:"読めてはいるが、それを再現できる「設計」に落とせていない。調子の良い日と悪い日のムラが大きい。",
+      next:"毎ラウンド「なぜ効いたか」を1つだけ言語化する。感覚を、次も再現できる言葉に変える。" },
+  5:{ name:"主導権フェーズ", en:"CONTROL",
+      now:"主導権を握り、自分の展開に持ち込める段階。すでに「設計して闘う」域に入っている。",
+      issue:"自分はできる。だがそれを「人に伝えられる言葉」にできているか。再現性が自分の個人技で止まっている。",
+      next:"自分の判断を「何を・なぜ・どう」で説明する習慣をつける。教えられる形にして初めて、技術は本物になる。" }
+};
+
+const PHASE_SHORT = {1:"防御本能",2:"手が出る",3:"攻防切替",4:"読み・組立",5:"主導権"};
+const PHASE_EN    = {1:"SURVIVAL",2:"OFFENSE",3:"TRANSITION",4:"READING",5:"CONTROL"};
+
+/* ---- 状態 ---- */
+const screens = {intro:document.getElementById('intro'),quiz:document.getElementById('quiz'),result:document.getElementById('result')};
+let index = 0;
+let yesCount = 0;
+
+function show(name){
+  Object.values(screens).forEach(s=>s.classList.remove('is-active'));
+  screens[name].classList.add('is-active');
+  window.scrollTo(0,0);
+}
+
+function setProgress(answered){
+  document.getElementById('barFill').style.width = (answered/QUESTIONS.length*100)+'%';
+}
+
+function renderQuestion(){
+  const n = index+1;
+  document.getElementById('qNow').textContent = n;
+  document.getElementById('qNo').textContent = 'Question ' + String(n).padStart(2,'0');
+  document.getElementById('qText').textContent = QUESTIONS[index];
+  setProgress(index); // 回答前は現在のステップまで
+}
+
+function start(){
+  index = 0; yesCount = 0;
+  renderQuestion();
+  show('quiz');
+}
+
+function answer(v){
+  if(v===1) yesCount++;
+  index++;
+  setProgress(index);
+  if(index < QUESTIONS.length){
+    // 短い間を置いて次の質問へ
+    const qbody = document.querySelector('.qbody');
+    qbody.style.opacity = 0;
+    qbody.style.transform = 'translateY(10px)';
+    qbody.style.transition = 'opacity .25s var(--ease), transform .25s var(--ease)';
+    setTimeout(()=>{
+      renderQuestion();
+      requestAnimationFrame(()=>{ qbody.style.opacity=1; qbody.style.transform='none'; });
+    },220);
+  } else {
+    showResult();
+  }
+}
+
+function buildLadder(current){
+  const wrap = document.getElementById('ladder');
+  wrap.innerHTML='';
+  for(let i=1;i<=5;i++){
+    const r=document.createElement('div');
+    r.className='rung'+(i===current?' current':'');
+    r.innerHTML =
+      '<span class="rn">'+i+'</span>'+
+      '<span class="rname">'+PHASE_SHORT[i]+'</span>'+
+      '<span class="ren">'+PHASE_EN[i]+'</span>';
+    wrap.appendChild(r);
+  }
+  // 下段から該当段まで順に点灯（控えめな登り演出）
+  const rungs = wrap.querySelectorAll('.rung');
+  const reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduce){
+    for(let i=0;i<current;i++) rungs[i].classList.add('lit');
+    return;
+  }
+  let step=0;
+  const timer=setInterval(()=>{
+    if(step<current){ rungs[step].classList.add('lit'); step++; }
+    else clearInterval(timer);
+  },110);
+}
+
+function showResult(){
+  const phase = Math.min(5, Math.max(1, yesCount)); // 0も1も Phase1
+  const d = PHASES[phase];
+  document.getElementById('rNum').textContent = phase;
+  document.getElementById('rName').firstChild.textContent = d.name;
+  document.getElementById('rEn').textContent = d.en;
+  document.getElementById('rNow').textContent = d.now;
+  document.getElementById('rIssue').textContent = d.issue;
+  document.getElementById('rNext').textContent = d.next;
+  document.getElementById('ctaBtn').href = NOTE_ROADMAP_URL;
+  show('result');
+  setTimeout(()=>buildLadder(phase),120);
+}
+
+/* ---- イベント ---- */
+document.getElementById('startBtn').addEventListener('click',start);
+document.querySelectorAll('.ans').forEach(b=>{
+  b.addEventListener('click',()=>answer(Number(b.dataset.v)));
+});
+document.getElementById('restartBtn').addEventListener('click',()=>{ show('intro'); });
+</script>
+</body>
+</html>
